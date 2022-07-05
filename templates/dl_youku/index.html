@@ -1,0 +1,178 @@
+{% load staticfiles %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>動画ダウンロード</title>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="{% static 'assets/bootstrap/css/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'assets/css/css.css' %}">
+</head>
+<body>
+<div class="dy-container">
+    <div class="dy-contents">
+        <form id="id-url-reg-form" action="#" enctype="multipart/form-data"
+              novalidate="novalidate" onsubmit="return false;" target="_blank">{% csrf_token %}
+            <div class="dy-row">
+                <input id="id-url-select" class="dy-input" type="text" name="url" placeholder="URL" value=""/>
+            </div>
+            <div class="dy-row">
+                <div id="dyid-getvi" class="dy-btn dy-col-blue" onclick="getVideoInfo()">解析</div>
+            </div>
+            <input id="dyid-setformatid" type="hidden" name="formatid" value=""/>
+            <input id="dyid-isIos" type="hidden" name="isIos" value=""/>
+            <div id="dyid-formats" class="dy-row">
+                <!--
+                <input type="submit" class="dy-btn dy-col-yellow" value="ダウンロード"/>
+                <img id="id-loading" class="" src="{% static 'assets/img/loading.gif' %}" style="display: none"/>
+                -->
+            </div>
+        </form>
+        <span class="dy-row1 dy-loader"></span>
+    </div>
+</div>
+<!-- jQuery first, then Tether, then Bootstrap JS. -->
+<script src="{% static 'assets/js/jquery.min.js' %}"></script>
+<script src="{% static 'assets/js/tether.min.js' %}"></script>
+<script src="{% static 'assets/bootstrap/js/bootstrap.min.js' %}"></script>
+<script src="{% static 'assets/js/ajaxSend.js' %}"></script>
+<script src="{% static 'assets/js/jquery.fileDownload.js' %}"></script>
+<script>
+    function validateForm(x) {
+        var isyouku = x.indexOf("youku"),
+            istudou = x.indexOf("tudou");
+        if (isyouku === -1 && istudou === -1) {
+            //alert("無効なURL!");
+            return false;
+        }
+        return true;
+    }
+    function getVideoInfo() {
+        var video_url = $("#id-url-select").val();
+        if (!validateForm(video_url)) {
+            return false;
+        }
+        var $formats = $("#dyid-formats");
+        $formats.empty();
+        $(".dy-loader").html('解析中');
+        $(".dy-loader").css("display", "inherit");
+        $.ajax({
+            url: "/getvideoinfo/",
+            type: 'POST',
+            data: {
+                'url': video_url,
+            },
+            dataType: 'json',
+            success: function (data) {
+                if (data.result == "S_OK") {
+                    viewFormats(data.content)
+                }
+                else if (data.result == "FAIL") {
+
+                }
+                $(".dy-loader").css("display", "none");
+            },
+            error: function () {
+                $(".dy-loader").css("display", "none");
+                alert("URL解析エラー");
+            }
+        });
+    }
+    var formats;
+    var title_len = 12;
+    $("#id-url-select").val('');
+    function viewFormats(data) {
+        var $formats = $("#dyid-formats");
+        $formats.empty();
+        var title = data.title;
+        formats = data.formats;
+        if (title.length > title_len) {
+            title = title.substring(0, title_len) + '...';
+        }
+        for (var i = 0; i < formats.length; i++) {
+            var re = false;
+            for (var j = 0; j < i; j++) {
+                if (formats[i][2] == formats[j][2]) {
+                    re = true;
+                    break;
+                }
+            }
+            if (re == true) continue;
+            var btn_nm = title + ' (' + formats[i][2].split('x')[1] + 'p/' + formats[i][1] + ')',
+                html = '<div class="dy-row1"><input type="submit" class="dy-btn dy-col-yellow" value="' + btn_nm + '" onclick="setFormatid(' + i + ')"/></div>';
+            $formats.prepend(html);
+        }
+    }
+    function setFormatid(id) {
+        id = formats[id][0];
+        $("#dyid-setformatid").val(id);
+    }
+    function isIos() {
+        var isIos = false;
+        var userAgent = (navigator.userAgent || navigator.vendor || window.opera).toLowerCase();
+        if (/ip(ad|hone|od)/.test(userAgent)) {
+            $("#dyid-isIos").val("true");
+            isIos = true;
+        } else {
+            $("#dyid-isIos").val("false");
+        }
+        return isIos;
+    }
+    $(document).on("submit", "form#id-url-reg-form", function (e) {
+        var video_url = $("#id-url-select").val();
+        if (!validateForm(video_url)) {
+            e.preventDefault();
+            return false;
+        }
+        $(".dy-loader").html('ダウンロード準備中');
+        $(".dy-loader").css("display", "inherit");
+        if (isIos()) {
+            $.ajax({
+                url: "/download/",
+                type: 'POST',
+                data: {
+                    'url': video_url,
+                    'formatid': $("#dyid-setformatid").val(),
+                    'isIos': 'true'
+                },
+                dataType: 'json',
+                success: function (data) {
+                    if (data.result == "S_OK") {
+                        window.location.href = data.content.videoUrl;
+                    }
+                    else if (data.result == "FAIL") {
+
+                    }
+                    $(".dy-loader").css("display", "none");
+                },
+                error: function () {
+                    $(".dy-loader").css("display", "none");
+                    alert("URL解析エラー");
+                }
+            });
+        }
+        else {
+            $.fileDownload('/download/', {
+                successCallback: function (url) {
+                    console.log(url);
+                    $(".dy-loader").css("display", "none");
+                },
+                failCallback: function (responseHtml, url) {
+                    console.log(responseHtml);
+                    console.log(url);
+                    $(".dy-loader").css("display", "none");
+                    alert("URL解析エラー")
+                },
+                httpMethod: "POST",
+                data: $(this).serialize()
+            });
+        }
+        e.preventDefault();
+        return false;
+    });
+
+</script>
+</body>
+</html>
